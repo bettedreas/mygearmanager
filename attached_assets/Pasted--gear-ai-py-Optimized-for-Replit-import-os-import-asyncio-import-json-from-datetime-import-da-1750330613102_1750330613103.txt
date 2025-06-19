@@ -1,0 +1,156 @@
+# gear_ai.py - Optimized for Replit
+import os
+import asyncio
+import json
+from datetime import datetime
+
+class GearAI:
+    def __init__(self):
+        self.client = ReplitOpenAIClient(os.getenv('OPENAI_API_KEY'))
+        self.gear_functions = self._get_gear_functions()
+    
+    def _get_gear_functions(self):
+        """Function definitions for gear management"""
+        return [
+            {
+                "name": "add_gear_item",
+                "description": "Add new gear to inventory",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "brand": {"type": "string"},
+                        "model": {"type": "string"},
+                        "category": {
+                            "type": "string",
+                            "enum": ["base_layer", "midlayer", "shell", "footwear", "accessories"]
+                        },
+                        "size": {"type": "string"},
+                        "cost": {"type": "number"},
+                        "specifications": {"type": "object"}
+                    },
+                    "required": ["brand", "model", "category"]
+                }
+            },
+            {
+                "name": "rate_gear_performance",
+                "description": "Rate gear performance for specific conditions",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "gear_id": {"type": "string"},
+                        "activity": {"type": "string"},
+                        "conditions": {
+                            "type": "object",
+                            "properties": {
+                                "temperature": {"type": "number"},
+                                "weather": {"type": "string"},
+                                "duration": {"type": "string"}
+                            }
+                        },
+                        "rating": {"type": "number", "minimum": 1, "maximum": 10},
+                        "notes": {"type": "string"}
+                    },
+                    "required": ["gear_id", "activity", "rating"]
+                }
+            },
+            {
+                "name": "recommend_layering",
+                "description": "Recommend layering system for conditions",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "activity": {"type": "string"},
+                        "conditions": {"type": "object"},
+                        "user_profile": {"type": "object"}
+                    },
+                    "required": ["activity", "conditions"]
+                }
+            }
+        ]
+    
+    async def process_chat_message(self, user_message: str, conversation_history: list = None):
+        """Main chat processing method"""
+        if conversation_history is None:
+            conversation_history = []
+        
+        # Build message context
+        messages = [
+            {
+                "role": "system",
+                "content": """You are an expert outdoor gear assistant. Help users manage their gear inventory, 
+                analyze performance, and plan for adventures. Use the provided functions to interact with 
+                the gear database. Be specific and helpful in your recommendations."""
+            }
+        ]
+        
+        # Add conversation history
+        messages.extend(conversation_history[-5:])  # Keep last 5 exchanges
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_message})
+        
+        try:
+            # Make API call with functions
+            response = await self.client.chat_completion(
+                messages=messages,
+                functions=self.gear_functions
+            )
+            
+            # Process response
+            return await self._process_response(response)
+            
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Sorry, I encountered an error: {str(e)}",
+                "suggestion": "Please try rephrasing your question or check your internet connection."
+            }
+    
+    async def _process_response(self, response):
+        """Process OpenAI response and handle function calls"""
+        message = response['choices'][0]['message']
+        
+        if message.get('function_call'):
+            # Handle function call
+            function_name = message['function_call']['name']
+            function_args = json.loads(message['function_call']['arguments'])
+            
+            # Execute the function (you'll implement these)
+            function_result = await self._execute_function(function_name, function_args)
+            
+            return {
+                "message": message.get('content', ''),
+                "function_called": function_name,
+                "function_result": function_result,
+                "success": True
+            }
+        else:
+            # Regular text response
+            return {
+                "message": message['content'],
+                "success": True
+            }
+    
+    async def _execute_function(self, function_name: str, args: dict):
+        """Execute the called function"""
+        if function_name == "add_gear_item":
+            return await self._add_gear_item(args)
+        elif function_name == "rate_gear_performance":
+            return await self._rate_gear_performance(args)
+        elif function_name == "recommend_layering":
+            return await self._recommend_layering(args)
+        else:
+            return {"error": f"Unknown function: {function_name}"}
+    
+    # Implement these based on your database setup
+    async def _add_gear_item(self, args):
+        # Add to your database
+        return {"success": True, "message": f"Added {args['brand']} {args['model']} to inventory"}
+    
+    async def _rate_gear_performance(self, args):
+        # Update performance data
+        return {"success": True, "message": f"Rated gear {args['gear_id']}: {args['rating']}/10"}
+    
+    async def _recommend_layering(self, args):
+        # Generate layering recommendations
+        return {"success": True, "recommendations": ["Base layer", "Mid layer", "Shell"]}
